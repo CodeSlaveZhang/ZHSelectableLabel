@@ -6,3 +6,8 @@
 	调用 startSelection  即可开始选中。调用endSelection 结束选中。
 
 [![ykK6JO.png](https://s3.ax1x.com/2021/01/30/ykK6JO.png)](https://imgchr.com/i/ykK6JO)
+
+
+
+上面markdown的图片不知道为啥加载不了。预览效果：
+https://imgchr.com/i/ykK6JO
