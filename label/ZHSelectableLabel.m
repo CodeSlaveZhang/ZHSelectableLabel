@@ -263,8 +263,8 @@ alpha:alphaValue]
 // 两个光标的间距最小为1
 - (NSRange)correctRange:(NSRange)arange{
     ///防止左右两边顶到头并且length为0
-    if (arange.location == self.text.length - 1) {///顶到最右边了
-        return NSMakeRange(self.text.length - 2, 1);
+    if (arange.location == self.text.length) {///顶到最右边了
+        return NSMakeRange(self.text.length - 1, 1);
     }
     if (arange.location == 0 && arange.length == 0) {
         return NSMakeRange(0, 1);///顶到最左边了
