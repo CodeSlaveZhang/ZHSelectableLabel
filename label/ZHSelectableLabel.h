@@ -51,7 +51,10 @@ NS_ASSUME_NONNULL_BEGIN
 ///左右两边的光栅
 @interface ZHSelectionCursorView : UIView
 
-+ (ZHSelectionCursorView *)cursor;
+
++ (KSSelectionCursorView *)leftCursor;
++ (KSSelectionCursorView *)rightCursor;
+
 
 @end
 

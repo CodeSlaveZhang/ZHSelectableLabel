@@ -16,7 +16,21 @@ alpha:alphaValue]
 #define ZHUIColorFromRGB(rgbValue) ZHUIColorFromRGBA(rgbValue, 1.0)
 
 #define ZHSelectionCursorWidth 2
-@interface ZHSelectableLabel()
+
+@protocol ZHSelectableLabel_Super_Private_Methods <NSObject>
+@optional
+///super private method
+- (CGRect)_convertRectFromLayout:(CGRect)rect;
+- (CGRect)_convertRectToLayout:(CGRect)rect;
+///将文字区域的坐标转换为self里面的坐标
+- (CGPoint)_convertPointFromLayout:(CGPoint)point;
+///将self里面的坐标转换为文字里面的坐标
+- (CGPoint)_convertPointToLayout:(CGPoint)point;
+
+@end
+
+
+@interface ZHSelectableLabel()<ZHSelectableLabel_Super_Private_Methods>
 ///选中的范围
 @property(nonatomic ,assign) NSRange selectedRange;
 ///两个光标
@@ -29,13 +43,7 @@ alpha:alphaValue]
 ///放大镜
 @property(nonatomic ,strong) UIImageView *magnifierView;
 
-///super private method
-- (CGRect)_convertRectFromLayout:(CGRect)rect;
-- (CGRect)_convertRectToLayout:(CGRect)rect;
-///将文字区域的坐标转换为self里面的坐标
-- (CGPoint)_convertPointFromLayout:(CGPoint)point;
-///将self里面的坐标转换为文字里面的坐标
-- (CGPoint)_convertPointToLayout:(CGPoint)point;
+
 @end
 
 
@@ -46,8 +54,8 @@ alpha:alphaValue]
 
 - (void)prepareSelectionIfNeed{
     if (!_leftCursor || !_rightCursor || !_selectionBackGroundView) {
-        self.leftCursor = [ZHSelectionCursorView cursor];
-        self.rightCursor = [ZHSelectionCursorView cursor];
+        self.leftCursor = [ZHSelectionCursorView leftCursor];
+        self.rightCursor = [ZHSelectionCursorView rightCursor];
         self.selectionBackGroundView = [[UIView alloc]initWithFrame:self.bounds];
         [self addSubview:self.selectionBackGroundView];
         [self.selectionBackGroundView mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -252,8 +260,20 @@ alpha:alphaValue]
 }
 
 // 两个光标的间距最小为1
+// 两个光标的间距最小为1
 - (NSRange)correctRange:(NSRange)arange{
-    return arange.length>0?arange:NSMakeRange(arange.location-1, 1);
+    ///防止左右两边顶到头并且length为0
+    if (arange.location == self.text.length - 1) {///顶到最右边了
+        return NSMakeRange(self.text.length - 2, 1);
+    }
+    if (arange.location == 0 && arange.length == 0) {
+        return NSMakeRange(0, 1);///顶到最左边了
+    }
+    if(arange.length == 0){
+        ///在中间length为0
+        return NSMakeRange(arange.location - 1, 1);
+    }
+    return arange;
 }
 
 //TODO: 放大镜
@@ -315,28 +335,42 @@ alpha:alphaValue]
 @implementation ZHSelectionCursorView : UIView
 
 
-+ (ZHSelectionCursorView *)cursor{
++ (ZHSelectionCursorView *)leftCursor{
     ZHSelectionCursorView *view = [[ZHSelectionCursorView alloc]initWithFrame:CGRectMake(0, 0, ZHSelectionCursorWidth, 17)];
-    [view creatSubview];
+    [view creatSubview:YES];
     view.backgroundColor = ZHUIColorFromRGB(0x008B45);
     return view;
 }
 
++ (ZHSelectionCursorView *)rightCursor{
+    ZHSelectionCursorView *view = [[ZHSelectionCursorView alloc]initWithFrame:CGRectMake(0, 0, ZHSelectionCursorWidth, 17)];
+    [view creatSubview:NO];
+    view.backgroundColor = ZHUIColorFromRGB(0x008B45);
+    return view;
+}
 
-
-- (void)creatSubview{
+- (void)creatSubview:(BOOL)isLeft{
     self.layer.masksToBounds = NO;
     UIView *dot = [UIView new];
     dot.backgroundColor = ZHUIColorFromRGB(0x008B45);
     dot.layer.cornerRadius = 4;
     dot.layer.masksToBounds = YES;
     [self addSubview:dot];
-    [dot mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.centerY.equalTo(self.mas_top);
-        make.centerX.equalTo(self);
-        make.size.mas_equalTo(CGSizeMake(8, 8));
-    }];
+    if (isLeft) {
+        [dot mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerY.equalTo(self.mas_top);
+            make.centerX.equalTo(self);
+            make.size.mas_equalTo(CGSizeMake(8, 8));
+        }];
+    }else{
+        [dot mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerY.equalTo(self.mas_bottom);
+            make.centerX.equalTo(self);
+            make.size.mas_equalTo(CGSizeMake(8, 8));
+        }];
+    }
 }
+
 
 -(void)removeFromSuperview{
     [super removeFromSuperview];
