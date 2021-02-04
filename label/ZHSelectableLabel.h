@@ -52,8 +52,8 @@ NS_ASSUME_NONNULL_BEGIN
 @interface ZHSelectionCursorView : UIView
 
 
-+ (KSSelectionCursorView *)leftCursor;
-+ (KSSelectionCursorView *)rightCursor;
++ (ZHSelectionCursorView *)leftCursor;
++ (ZHSelectionCursorView *)rightCursor;
 
 
 @end
