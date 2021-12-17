@@ -43,6 +43,7 @@ alpha:alphaValue]
 ///放大镜
 @property(nonatomic ,strong) UIImageView *magnifierView;
 
+@property(nonatomic ,weak)UIScrollView *scroll_super;//父视图的scrollView  如果存在的话
 
 @end
 
@@ -195,6 +196,7 @@ alpha:alphaValue]
 - (void)cursorMoved:(UIPanGestureRecognizer *)pan{
     CGPoint location = [pan locationInView:self];
     if (pan.state == UIGestureRecognizerStateBegan) {
+        self.scroll_super = [self getSuperScrollView];
         CGFloat xedge = 35;
         CGFloat yedge = 10;
         CGRect visibleLeftRect = CGRectMake(self.leftCursor.frame.origin.x - xedge, self.leftCursor.frame.origin.y-yedge, self.leftCursor.frame.size.width + xedge *2, self.leftCursor.frame.size.height + yedge *2);
@@ -219,6 +221,7 @@ alpha:alphaValue]
             [self moveCursor:_panGuestureLocateView toPoint:location];
             [self callBackChange];
         }else{
+            self.scroll_super = nil;
             [self removeMagnifier];
             [self callBackEnd];
         }
@@ -244,19 +247,52 @@ alpha:alphaValue]
 }
 
 ///手指一动 先获取光标应该一动的坐标  再获取当前起止点的textPosition 然后改变range 再刷新UI
-- (void)moveCursor:(ZHSelectionCursorView *)cursor toPoint:(CGPoint)point{
-    ///先设置光标位置
+- (void)moveCursor:(KSSelectionCursorView *)cursor toPoint:(CGPoint)point{
     CGRect frame = [self cursorNearTextFrameForPosition:point];
-    cursor.frame = [self cursorFrameKeepWidth:frame];
-    ///再读取起止点的postion
-    YYTextPosition *start = [self startPositionForCursor];
-    YYTextPosition *end = [self endPositionForCursor];
-    ///再获取range
-    YYTextRange *range = [YYTextRange rangeWithStart:start end:end];
-    self.selectedRange = [self correctRange:[range asRange]];
-    ///刷新标记
+    CGRect toFrame = [self cursorFrameKeepWidth:frame];
+    if (CGRectEqualToRect(toFrame, cursor.frame)) {
+        return;
+    }
+    cursor.frame = toFrame;
+    YYTextRange *range = [YYTextRange rangeWithStart:[self startPositionForCursor] end:[self endPositionForCursor]];
+    NSRange selectRange = [self correctRange:[range asRange]];
+    if (NSEqualRanges(selectRange, self.selectedRange)) {
+        return;
+    }
+    self.selectedRange = selectRange;
     [self _adjustSelectionBackGroundView];
     [self updataMagnifierForCursor:cursor];
+    ///如果父视图带scroll；检查下要不要自动移动一下
+    [self checkShouldAutoMoveScrollForCursor:cursor];
+}
+
+- (void)checkShouldAutoMoveScrollForCursor:(KSSelectionCursorView *)cursor{
+    UIScrollView *scroll = self.scroll_super;
+    if(!scroll || ![scroll isKindOfClass: [UIScrollView class]]){
+        return;
+    }
+    if (self.height<70) {
+        return;
+    }
+    UIView *scrollSuper = scroll.superview;
+    CGPoint center = [scrollSuper convertPoint:cursor.center fromView:cursor.superview];
+    if (center.y>scroll.bottom - 30) {
+        CGPoint contentOffset = scroll.contentOffset;
+        [scroll setContentOffset:CGPointMake(contentOffset.x, contentOffset.y+16) animated:YES];
+    }else if (center.y<scroll.top +30){
+        CGPoint contentOffset = scroll.contentOffset;
+        [scroll setContentOffset:CGPointMake(contentOffset.x, contentOffset.y-16) animated:YES];
+    }
+}
+
+
+
+- (UIScrollView *)getSuperScrollView{
+    UIView *spView = self.superview;
+    while (![spView isKindOfClass:UIScrollView.self] && spView!=nil) {
+        spView = spView.superview;
+    }
+    return spView;
 }
 
 // 两个光标的间距最小为1
@@ -276,39 +312,44 @@ alpha:alphaValue]
     return arange;
 }
 
-//TODO: 放大镜
-- (void)updataMagnifierForCursor:(ZHSelectionCursorView *)cursor{
+// 放大镜
+
+// 放大镜
+- (void)updataMagnifierForCursor:(KSSelectionCursorView *)cursor{
     [self addMagnifier];
     ///先拿到整个window的截图
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
-    UIGraphicsBeginImageContextWithOptions(window.frame.size, NO, 0);
+    UIWindow *window = [UIApplication sharedApplication].delegate.window;
+    UIGraphicsBeginImageContextWithOptions(self.size, NO, 0);
     CGContextRef context = UIGraphicsGetCurrentContext();
-    [window.layer renderInContext:context];
+    [self.layer renderInContext:context];
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
-    
-    //再获取需要截取的大小
-    CGFloat captureWidth = 114;
-    CGFloat captureHeight = cursor.frame.size.height * 1.4;
-    CGRect focusRect = CGRectMake(cursor.center.x - captureWidth/2, cursor.center.y - captureHeight/2, captureWidth, captureHeight);
-    focusRect = [self convertRect:focusRect toView:window];
-    
-    if (image) {
-        //由于CGImage的坐标系以像素为单位需要缩放
-        CGFloat scale = [UIScreen mainScreen].scale;
-        CGRect captureRect = CGRectMake(focusRect.origin.x * scale, focusRect.origin.y * scale, focusRect.size.width * scale, focusRect.size.height * scale);
-        CGImageRef finalImageRef =CGImageCreateWithImageInRect(image.CGImage,captureRect);
-        UIImage *finalImage = [UIImage imageWithCGImage:finalImageRef];
-        CGImageRelease(finalImageRef);///要养成随手release的习惯
-        self.magnifierView.image = finalImage;
-    }
-    ///结束使用上下文 要养成习惯
     UIGraphicsEndImageContext();
-    ///计算放大镜显示的区域
-    CGFloat displayScale = 1.5;
-    CGSize displaySize = CGSizeMake(captureWidth *displayScale, captureHeight * displayScale);
-    CGRect displayRect = CGRectMake(cursor.center.x - displaySize.width/2, cursor.center.y - displaySize.height/2 - 40,displaySize.width,displaySize.height);
-    self.magnifierView.frame = [self convertRect:displayRect toView:window];
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        //再获取需要截取的大小
+        CGFloat captureWidth = 88;
+        CGFloat captureHeight = cursor.height * 1.2;
+        CGRect focusRect = CGRectMake(cursor.centerX - captureWidth/2, cursor.centerY - captureHeight/2, captureWidth, captureHeight);
+//        focusRect = [self convertRect:focusRect toView:window];
+        UIImage *finalImage;
+        if (image) {
+            //由于CGImage的坐标系以像素为单位需要缩放
+            CGFloat scale = [UIScreen mainScreen].scale;
+            CGRect captureRect = CGRectMake(focusRect.origin.x * scale, focusRect.origin.y * scale, focusRect.size.width * scale, focusRect.size.height * scale);
+            CGImageRef finalImageRef =CGImageCreateWithImageInRect(image.CGImage,captureRect);
+            finalImage = [UIImage imageWithCGImage:finalImageRef];
+            CGImageRelease(finalImageRef);///要养成随手release的习惯
+        }
+        ///计算放大镜显示的区域
+        CGFloat displayScale = 1.5;
+        CGSize displaySize = CGSizeMake(captureWidth *displayScale, captureHeight * displayScale);
+        CGRect displayRect = CGRectMake(cursor.centerX - displaySize.width/2, cursor.centerY - displaySize.height/2 - 56,displaySize.width,displaySize.height);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.magnifierView.image = finalImage;
+            self.magnifierView.frame = [self convertRect:displayRect toView:window];
+        });
+    });
 }
+
 
 - (void)addMagnifier{
     if (!self.magnifierView) {
