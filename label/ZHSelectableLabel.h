@@ -8,19 +8,7 @@
 #import "YYLabel.h"
 #import <YYText/YYText.h>
 NS_ASSUME_NONNULL_BEGIN
-
-/*
- 注意 ：
- 这个label的使用需要保证
- 
- label的文字显示区域 与 label的frame是一致的
- 
- 即label的frame是通过计算文字得到的
- 
- 
- */
-
-
+@class ZHSelectionCursorView;
 @class ZHSelectableLabel;
 @protocol ZHSelectableLabelDelegate <NSObject>
 
@@ -31,13 +19,21 @@ NS_ASSUME_NONNULL_BEGIN
 ///选择文本结束 手指离开屏幕
 - (void)lable:(ZHSelectableLabel *)alable didEndSelectionWithRange:(NSRange)arange;
 
-
 @end
 
 @interface ZHSelectableLabel : YYLabel
-@property(nonatomic ,strong)id<ZHSelectableLabelDelegate>selectionDeleagte;
+@property(nonatomic ,weak)id <ZHSelectableLabelDelegate>selectionDeleagte;
 ///选中的范围  可KVO
 @property(nonatomic ,readonly) NSRange selectedRange;
+
+///两个光标
+@property(nonatomic ,strong) ZHSelectionCursorView *leftCursor;
+@property(nonatomic ,strong) ZHSelectionCursorView *rightCursor;
+
+
+- (void)setTextSelectedRange:(NSRange)selectedRange;
+
+@property(nonatomic ,readonly)NSString *selectedText;
 
 ///结束选择
 - (void)endSelection;
@@ -45,18 +41,23 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)startSelection;
 ///开始选择并且指定初始范围
 - (void)startSelectionWithRange:(NSRange)range;
+///从点击的位置开始选择
+- (void)startSelectionWithPressPosition:(CGPoint)position;
 @end
+
+
 
 
 ///左右两边的光栅
 @interface ZHSelectionCursorView : UIView
 
-
 + (ZHSelectionCursorView *)leftCursor;
 + (ZHSelectionCursorView *)rightCursor;
 
-
 @end
+
+
+
 
 
 
