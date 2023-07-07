@@ -51,8 +51,8 @@ alpha:alphaValue]
 
 @implementation ZHSelectableLabel{
     ZHSelectionCursorView *_panGuestureLocateView;///当前滑动手势在哪个view上
+    BOOL _isSelecting;
 }
-
 - (void)prepareSelectionIfNeed{
     if (!_leftCursor || !_rightCursor || !_selectionBackGroundView) {
         self.leftCursor = [ZHSelectionCursorView leftCursor];
@@ -69,25 +69,44 @@ alpha:alphaValue]
 }
 
 - (void)startSelection{
-    [self startSelectionWithRange:NSMakeRange(0, self.text.length)];
+    if (_isSelecting) {
+        return;
+    }
+    if (!self.text.length) {
+        return;
+    }
+    NSRange range = NSMakeRange(0, self.attributedText.length);
+    NSRange visibleRange = range;
+    YYTextLayout *layout = self.textLayout;
+    if (layout.lines.count > 0) {
+        YYTextLine *line = [layout.lines lastObject];
+        visibleRange = NSMakeRange(0, line.range.location+line.range.length);
+    }
+    [self startSelectionWithRange:visibleRange];
+    self.selectedRange = range;
 }
 
 - (void)endSelection{
+    if (!_isSelecting) {
+        return;
+    }
+    _isSelecting = NO;
     [self removePanGesture];
     self.leftCursor.hidden = YES;
     self.rightCursor.hidden = YES;
     self.selectedRange = NSMakeRange(0, 0);
-    [self removeAllSubviewsForView:self.selectionBackGroundView];
+    [self.selectionBackGroundView removeAllSubviews];
     self.selectionBackGroundView.hidden = YES;
 }
 
-- (void)removeAllSubviewsForView:(UIView *)view{
-    for (UIView *sub in view.subviews) {
-        [sub removeFromSuperview];
-    }
+-(NSString *)selectedText{
+    NSAttributedString *selectedText = [self.attributedText attributedSubstringFromRange:self.selectedRange];
+    NSString *selectedTextPlain = [selectedText yy_plainTextForRange:selectedText.yy_rangeOfAll];
+    return  [selectedTextPlain removeHTMLTags];
 }
 
 - (void)startSelectionWithRange:(NSRange)range{
+    _isSelecting = YES;
     [self prepareSelectionIfNeed];
     self.leftCursor.hidden = NO;
     self.rightCursor.hidden = NO;
@@ -101,18 +120,40 @@ alpha:alphaValue]
     [self _adjustSelectionBackGroundView];
 }
 
+- (void)setTextSelectedRange:(NSRange)selectedRange{
+    [self _setSelectedRange:selectedRange];
+}
+
+
+- (void)startSelectionWithPressPosition:(CGPoint)position{
+    CGPoint textPoint = [self _convertPointToLayout:position];
+    YYTextLayout *layout = self.textLayout;
+    ///获取此点的文字position
+    YYTextPosition *textPosition = [layout closestPositionToPoint:textPoint];
+    NSInteger start = textPosition.offset;
+    if (start+3<self.text.length) {
+        [self startSelectionWithRange:NSMakeRange(start, 3)];
+    }else{
+        [self startSelectionWithRange:NSMakeRange(self.text.length - 3, 3)];
+    }
+}
+
+-(void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event{
+    [super touchesEnded:touches withEvent:event];
+}
+
 #pragma mark - 背景
 - (void)_adjustSelectionBackGroundView{
     YYTextRange *range = [YYTextRange rangeWithRange:self.selectedRange];
     NSArray *rects = [self.textLayout selectionRectsForRange:range];
-    [rects enumerateObjectsUsingBlock:^(YYTextSelectionRect *rect, NSUInteger idx, BOOL *stop) {
-        rect.rect = [self _convertRectFromLayout:rect.rect];
-    }];
-    [self removeAllSubviewsForView:self.selectionBackGroundView];
+    [self.selectionBackGroundView removeAllSubviews];
     [rects enumerateObjectsUsingBlock: ^(YYTextSelectionRect *r, NSUInteger idx, BOOL *stop) {
-        CGRect rect = r.rect;
+        CGRect rect = [self _convertRectFromLayout:r.rect];;
         rect = CGRectStandardize(rect);
-        rect = YYTextCGRectPixelRound(rect);
+        rect = CGRectPixelRound(rect);
+        if (CGRectGetMaxX(rect)>self.width) {
+            rect = CGRectMake(rect.origin.x, rect.origin.y, self.width - rect.origin.x, rect.size.height);
+        }
         if (r.containsStart || r.containsEnd) {
             rect = [self cursorFrameKeepWidth:rect];
             if (r.containsStart) {
@@ -124,8 +165,8 @@ alpha:alphaValue]
         }else{
             if (rect.size.width > 0 && rect.size.height > 0){
                 UIView *mark = [[UIView alloc] initWithFrame:rect];
-                mark.backgroundColor = ZHUIColorFromRGB(0x3CB371);
-                mark.alpha = 0.6;
+                mark.backgroundColor = UIColorHex(0x7972fe);
+                mark.alpha = 0.24;
                 [self.selectionBackGroundView addSubview:mark];
             }
         }
@@ -135,19 +176,9 @@ alpha:alphaValue]
 }
 
 - (CGRect)cursorFrameKeepWidth:(CGRect)rect{
-    return CGRectMake(rect.origin.x, rect.origin.y, ZHSelectionCursorWidth, rect.size.height);
+    CGFloat edge = 2.0;
+    return CGRectMake(rect.origin.x, rect.origin.y-edge, ZHSelectionCursorWidth, rect.size.height+edge*2);
 }
-
-- (YYTextLine *)firstTextLine{
-    return self.textLayout.lines.firstObject;;
-}
-
-- (CGFloat)firstTextLineTop{
-    return [self firstTextLine].top;
-}
-
-
-
 
 #pragma mark - 光栅
 - (CGRect)leftCursorNearTextFrame{
@@ -185,22 +216,36 @@ alpha:alphaValue]
 
 - (void)addPanGesture{
     self.panGesture = [[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(cursorMoved:)];
-    [self addGestureRecognizer:self.panGesture];
+    self.panGesture.delegate = self;
+    if (self.superview) {
+        [self.superview addGestureRecognizer:self.panGesture];
+        self.panGestureView = self.superview;
+    }else{
+        [self addGestureRecognizer:self.panGesture];
+        self.panGestureView = self;
+    }
 }
 
 - (void)removePanGesture{
-    [self removeGestureRecognizer:self.panGesture];
+    [self.panGestureView removeGestureRecognizer:self.panGesture];
 }
+
+-(void)dealloc{
+    [self removePanGesture];
+}
+
 
 //手势
 - (void)cursorMoved:(UIPanGestureRecognizer *)pan{
     CGPoint location = [pan locationInView:self];
     if (pan.state == UIGestureRecognizerStateBegan) {
         self.scroll_super = [self getSuperScrollView];
-        CGFloat xedge = 35;
+        //左右20像素
+        CGFloat xedge = 30;
         CGFloat yedge = 10;
-        CGRect visibleLeftRect = CGRectMake(self.leftCursor.frame.origin.x - xedge, self.leftCursor.frame.origin.y-yedge, self.leftCursor.frame.size.width + xedge *2, self.leftCursor.frame.size.height + yedge *2);
-        CGRect visibleRightRect = CGRectMake(self.rightCursor.frame.origin.x - xedge, self.rightCursor.frame.origin.y-yedge, self.rightCursor.frame.size.width + xedge *2, self.rightCursor.frame.size.height + yedge *2);
+        
+        CGRect visibleLeftRect = CGRectMake(self.leftCursor.centerX - xedge, self.leftCursor.centerY-yedge, self.leftCursor.width + xedge *2, self.leftCursor.height + yedge *2);
+        CGRect visibleRightRect = CGRectMake(self.rightCursor.centerX - xedge, self.rightCursor.centerY-yedge, self.rightCursor.width + xedge *2, self.rightCursor.height + yedge *2);
         BOOL willStart = YES;
         if (CGRectContainsPoint(visibleLeftRect, location)) {
             _panGuestureLocateView = self.leftCursor;///滑动左边的光标
@@ -246,8 +291,9 @@ alpha:alphaValue]
     }
 }
 
+
 ///手指一动 先获取光标应该一动的坐标  再获取当前起止点的textPosition 然后改变range 再刷新UI
-- (void)moveCursor:(KSSelectionCursorView *)cursor toPoint:(CGPoint)point{
+- (void)moveCursor:(ZHSelectionCursorView *)cursor toPoint:(CGPoint)point{
     CGRect frame = [self cursorNearTextFrameForPosition:point];
     CGRect toFrame = [self cursorFrameKeepWidth:frame];
     if (CGRectEqualToRect(toFrame, cursor.frame)) {
@@ -266,7 +312,7 @@ alpha:alphaValue]
     [self checkShouldAutoMoveScrollForCursor:cursor];
 }
 
-- (void)checkShouldAutoMoveScrollForCursor:(KSSelectionCursorView *)cursor{
+- (void)checkShouldAutoMoveScrollForCursor:(ZHSelectionCursorView *)cursor{
     UIScrollView *scroll = self.scroll_super;
     if(!scroll || ![scroll isKindOfClass: [UIScrollView class]]){
         return;
@@ -295,7 +341,7 @@ alpha:alphaValue]
     return spView;
 }
 
-// 两个光标的间距最小为1
+
 // 两个光标的间距最小为1
 - (NSRange)correctRange:(NSRange)arange{
     ///防止左右两边顶到头并且length为0
@@ -313,9 +359,7 @@ alpha:alphaValue]
 }
 
 // 放大镜
-
-// 放大镜
-- (void)updataMagnifierForCursor:(KSSelectionCursorView *)cursor{
+- (void)updataMagnifierForCursor:(ZHSelectionCursorView *)cursor{
     [self addMagnifier];
     ///先拿到整个window的截图
     UIWindow *window = [UIApplication sharedApplication].delegate.window;
@@ -324,43 +368,44 @@ alpha:alphaValue]
     [self.layer renderInContext:context];
     UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
+    CGFloat captureWidth = 88;
+    CGFloat captureHeight = cursor.height + 4;
+    CGFloat displayScale = 1.2;
+    CGFloat scale = [UIScreen mainScreen].scale;
+    //再获取需要截取的大小
+    CGRect focusRect = CGRectMake(cursor.centerX - captureWidth/2, cursor.centerY - captureHeight/2, captureWidth, captureHeight);
+    CGRect captureRect = CGRectMake(focusRect.origin.x * scale, focusRect.origin.y * scale, focusRect.size.width * scale, focusRect.size.height * scale);
+    CGSize displaySize = CGSizeMake(captureWidth *displayScale, captureHeight * displayScale);
+    CGRect displayRect = CGRectMake(cursor.centerX - displaySize.width/2, cursor.centerY - displaySize.height/2 - 56,displaySize.width,displaySize.height);
     dispatch_async(dispatch_get_global_queue(0, 0), ^{
-        //再获取需要截取的大小
-        CGFloat captureWidth = 88;
-        CGFloat captureHeight = cursor.height * 1.2;
-        CGRect focusRect = CGRectMake(cursor.centerX - captureWidth/2, cursor.centerY - captureHeight/2, captureWidth, captureHeight);
 //        focusRect = [self convertRect:focusRect toView:window];
         UIImage *finalImage;
         if (image) {
             //由于CGImage的坐标系以像素为单位需要缩放
-            CGFloat scale = [UIScreen mainScreen].scale;
-            CGRect captureRect = CGRectMake(focusRect.origin.x * scale, focusRect.origin.y * scale, focusRect.size.width * scale, focusRect.size.height * scale);
             CGImageRef finalImageRef =CGImageCreateWithImageInRect(image.CGImage,captureRect);
             finalImage = [UIImage imageWithCGImage:finalImageRef];
             CGImageRelease(finalImageRef);///要养成随手release的习惯
         }
         ///计算放大镜显示的区域
-        CGFloat displayScale = 1.5;
-        CGSize displaySize = CGSizeMake(captureWidth *displayScale, captureHeight * displayScale);
-        CGRect displayRect = CGRectMake(cursor.centerX - displaySize.width/2, cursor.centerY - displaySize.height/2 - 56,displaySize.width,displaySize.height);
         dispatch_async(dispatch_get_main_queue(), ^{
             self.magnifierView.image = finalImage;
-            self.magnifierView.frame = [self convertRect:displayRect toView:window];
+            [self.magnifierView sizeToFit];
+            CGRect displayRect_ = CGRectMake(displayRect.origin.x, displayRect.origin.y, self.magnifierView.width, self.magnifierView.height);
+            self.magnifierView.frame = [self convertRect:displayRect_ toView:window];
         });
     });
 }
-
 
 - (void)addMagnifier{
     if (!self.magnifierView) {
         self.magnifierView = [UIImageView new];
         self.magnifierView.backgroundColor = [UIColor whiteColor];
-        self.magnifierView.layer.cornerRadius = 3;
+        self.magnifierView.layer.cornerRadius = 12;
         self.magnifierView.layer.masksToBounds = YES;
-        self.magnifierView.layer.borderWidth = 0.5;
+        self.magnifierView.layer.borderWidth = 1;
         self.magnifierView.layer.borderColor = UIColor.whiteColor.CGColor;
     }
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
+    UIWindow *window = [UIApplication sharedApplication].delegate.window;
     if (!self.magnifierView.superview) {
         [window addSubview:self.magnifierView];
     }
@@ -369,6 +414,29 @@ alpha:alphaValue]
 - (void)removeMagnifier{
     [self.magnifierView removeFromSuperview];
 }
+
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer{
+    if (gestureRecognizer != self.panGesture) {
+        return [super gestureRecognizerShouldBegin:gestureRecognizer];
+    }
+    CGPoint location = [gestureRecognizer locationInView:self];
+    self.scroll_super = [self getSuperScrollView];
+    //左右20像素
+    CGFloat xedge = 30;
+    CGFloat yedge = 10;
+    
+    CGRect visibleLeftRect = CGRectMake(self.leftCursor.centerX - xedge, self.leftCursor.centerY-yedge, self.leftCursor.width + xedge *2, self.leftCursor.height + yedge *2);
+    CGRect visibleRightRect = CGRectMake(self.rightCursor.centerX - xedge, self.rightCursor.centerY-yedge, self.rightCursor.width + xedge *2, self.rightCursor.height + yedge *2);
+    BOOL willStart = YES;
+    if (CGRectContainsPoint(visibleLeftRect, location)) {
+        return YES;
+    }else if (CGRectContainsPoint(visibleRightRect, location)){
+        return YES;
+    }else{
+        return NO;
+    }
+}
+
 @end
 
 
@@ -379,21 +447,24 @@ alpha:alphaValue]
 + (ZHSelectionCursorView *)leftCursor{
     ZHSelectionCursorView *view = [[ZHSelectionCursorView alloc]initWithFrame:CGRectMake(0, 0, ZHSelectionCursorWidth, 17)];
     [view creatSubview:YES];
-    view.backgroundColor = ZHUIColorFromRGB(0x008B45);
+//    view.backgroundColor = UIColorHex(0x008B45);
+    view.backgroundColor = UIColorHex(0x7972fe);
     return view;
 }
 
 + (ZHSelectionCursorView *)rightCursor{
     ZHSelectionCursorView *view = [[ZHSelectionCursorView alloc]initWithFrame:CGRectMake(0, 0, ZHSelectionCursorWidth, 17)];
     [view creatSubview:NO];
-    view.backgroundColor = ZHUIColorFromRGB(0x008B45);
+    view.backgroundColor = UIColorHex(0x7972fe);
     return view;
 }
+
+
 
 - (void)creatSubview:(BOOL)isLeft{
     self.layer.masksToBounds = NO;
     UIView *dot = [UIView new];
-    dot.backgroundColor = ZHUIColorFromRGB(0x008B45);
+    dot.backgroundColor = UIColorHex(0x7972fe);
     dot.layer.cornerRadius = 4;
     dot.layer.masksToBounds = YES;
     [self addSubview:dot];
@@ -411,7 +482,6 @@ alpha:alphaValue]
         }];
     }
 }
-
 
 -(void)removeFromSuperview{
     [super removeFromSuperview];
