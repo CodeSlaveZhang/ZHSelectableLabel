@@ -8,6 +8,8 @@
 #import "YYLabel.h"
 #import <YYText/YYText.h>
 NS_ASSUME_NONNULL_BEGIN
+
+
 @class ZHSelectionCursorView;
 @class ZHSelectableLabel;
 @protocol ZHSelectableLabelDelegate <NSObject>
@@ -27,8 +29,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic ,readonly) NSRange selectedRange;
 
 ///两个光标
-@property(nonatomic ,strong) ZHSelectionCursorView *leftCursor;
-@property(nonatomic ,strong) ZHSelectionCursorView *rightCursor;
+@property(nonatomic ,readonly) ZHSelectionCursorView *leftCursor;
+@property(nonatomic ,readonly) ZHSelectionCursorView *rightCursor;
 
 
 - (void)setTextSelectedRange:(NSRange)selectedRange;
