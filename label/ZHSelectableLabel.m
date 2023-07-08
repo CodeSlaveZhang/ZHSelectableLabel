@@ -258,6 +258,9 @@ CGRect _CGRectPixelRound(CGRect rect) {
 
 //手势
 - (void)cursorMoved:(UIPanGestureRecognizer *)pan{
+    if (pan!=self.panGesture) {
+        return;
+    }
     CGPoint location = [pan locationInView:self];
     if (pan.state == UIGestureRecognizerStateBegan) {
         self.scroll_super = [self getSuperScrollView];
