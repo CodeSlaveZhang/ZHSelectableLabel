@@ -93,7 +93,7 @@ alpha:alphaValue]
         return;
     }
     _isSelecting = NO;
-    [self removePanGesture];
+    _panGesture.enabled = NO;
     self.leftCursor.hidden = YES;
     self.rightCursor.hidden = YES;
     self.selectedRange = NSMakeRange(0, 0);
@@ -236,24 +236,20 @@ CGRect _CGRectPixelRound(CGRect rect) {
 #pragma mark - 滑动手势
 
 - (void)addPanGesture{
-    self.panGesture = [[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(cursorMoved:)];
-    self.panGesture.delegate = self;
-    if (self.superview) {
-        [self.superview addGestureRecognizer:self.panGesture];
-        self.panGestureView = self.superview;
-    }else{
-        [self addGestureRecognizer:self.panGesture];
-        self.panGestureView = self;
+    if (!_panGesture) {
+        _panGesture = [[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(cursorMoved:)];
+        _panGesture.delegate = self;
+        if (self.superview) {
+            [self.superview addGestureRecognizer:self.panGesture];
+            self.panGestureView = self.superview;
+        }else{
+            [self addGestureRecognizer:self.panGesture];
+            self.panGestureView = self;
+        }
     }
+    _panGesture.enabled = YES;
 }
 
-- (void)removePanGesture{
-    [self.panGestureView removeGestureRecognizer:self.panGesture];
-}
-
--(void)dealloc{
-    [self removePanGesture];
-}
 
 
 //手势
