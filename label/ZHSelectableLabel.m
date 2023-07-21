@@ -317,7 +317,21 @@ CGRect _CGRectPixelRound(CGRect rect) {
     CGRect frame = [self cursorNearTextFrameForPosition:point];
     CGRect toFrame = [self cursorFrameKeepWidth:frame];
     if (CGRectEqualToRect(toFrame, cursor.frame)) {
-        return;
+        return;///未移动
+    }
+    CGRect leftCursorFrame = self.leftCursor.frame;
+    CGRect rightCursorFrame = self.rightCursor.frame;
+    if (cursor == self.leftCursor) {
+        leftCursorFrame = toFrame;//移动的左边
+    }else{
+        rightCursorFrame = toFrame;//移动的右边
+    }
+    ///是否是选中多行
+    BOOL selectMutiLine = !CGRectContainsPoint(leftCursorFrame, CGPointMake(leftCursorFrame.origin.x, CGRectGetMidY(rightCursorFrame)));
+    if (!selectMutiLine) {
+        if (CGRectGetMidX(rightCursorFrame)<=CGRectGetMidX(leftCursorFrame)) {
+            return;//单行的判断是不是重合了
+        }
     }
     cursor.frame = toFrame;
     YYTextRange *range = [YYTextRange rangeWithStart:[self startPositionForCursor] end:[self endPositionForCursor]];
