@@ -267,13 +267,23 @@ CGRect _CGRectPixelRound(CGRect rect) {
         CGRect visibleLeftRect = CGRectMake(self.leftCursor.center.x - xedge, self.leftCursor.center.y-yedge, self.leftCursor.frame.size.width + xedge *2, self.leftCursor.frame.size.height + yedge *2);
         CGRect visibleRightRect = CGRectMake(self.rightCursor.center.x - xedge, self.rightCursor.center.y-yedge, self.rightCursor.frame.size.width + xedge *2, self.rightCursor.frame.size.height + yedge *2);
         BOOL willStart = YES;
-        if (CGRectContainsPoint(visibleLeftRect, location)) {
-            _panGuestureLocateView = self.leftCursor;///滑动左边的光标
-        }else if (CGRectContainsPoint(visibleRightRect, location)){
-            _panGuestureLocateView = self.rightCursor;///滑动右边的光标
+        if (CGRectContainsPoint(visibleLeftRect, location) && CGRectContainsPoint(visibleRightRect, location)) {
+            ///两个光标都命中的时候判断方向 让滑动更加跟手一些
+            CGPoint translation = [pan velocityInView:pan.view];
+            if(translation.x>0){
+                _panGuestureLocateView = self.rightCursor;//向右滑动
+            }else{
+                _panGuestureLocateView = self.leftCursor;//向左滑动
+            }
         }else{
-            _panGuestureLocateView = nil;//无效手势
-            willStart = NO;
+            if (CGRectContainsPoint(visibleLeftRect, location)) {
+                _panGuestureLocateView = self.leftCursor;///滑动左边的光标
+            }else if (CGRectContainsPoint(visibleRightRect, location)){
+                _panGuestureLocateView = self.rightCursor;///滑动右边的光标
+            }else{
+                _panGuestureLocateView = nil;//无效手势
+                willStart = NO;
+            }
         }
         if (willStart) {
             [self callBackStart];
